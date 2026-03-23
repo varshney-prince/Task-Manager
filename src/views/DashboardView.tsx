@@ -46,6 +46,25 @@ export const DashboardView: React.FC = () => {
     color: label === 'Work Ritual' ? 'bg-primary' : label === 'Personal Growth' ? 'bg-tertiary-fixed-dim' : 'bg-on-secondary-container'
   }));
 
+  const toggleTaskCompletion = async (taskId: string) => {
+    const task = tasks.find(t => t.id === taskId);
+    if (!task) return;
+
+    try {
+      const response = await fetch(`/api/tasks/${taskId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ isCompleted: !task.isCompleted })
+      });
+
+      if (response.ok) {
+        setTasks(tasks.map(t => t.id === taskId ? { ...t, isCompleted: !t.isCompleted } : t));
+      }
+    } catch (error) {
+      console.error('Failed to toggle task completion:', error);
+    }
+  };
+
   return (
     <div className="px-12 py-8 max-w-7xl mx-auto">
       <section className="mb-12 flex justify-between items-end">
@@ -111,7 +130,7 @@ export const DashboardView: React.FC = () => {
                   animate={{ opacity: 1, x: 0 }}
                   transition={{ delay: index * 0.1 }}
                 >
-                  <TaskCard task={task} />
+                  <TaskCard task={task} onToggle={toggleTaskCompletion} />
                 </motion.div>
               ))
             )}

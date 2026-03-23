@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   BarChart3, 
   TrendingUp, 
@@ -8,33 +8,97 @@ import {
   Lightbulb, 
   Rocket, 
   Layout,
-  Download
+  Download,
+  Loader2
 } from 'lucide-react';
 import { motion } from 'motion/react';
 
 export const AnalyticsView: React.FC = () => {
+  const [tasks, setTasks] = useState<any[]>([]);
+  const [projects, setProjects] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        setIsLoading(true);
+        const [tasksRes, projectsRes] = await Promise.all([
+          fetch('/api/tasks'),
+          fetch('/api/projects')
+        ]);
+        const tasksData = await tasksRes.json();
+        const projectsData = await projectsRes.json();
+        setTasks(Array.isArray(tasksData) ? tasksData : []);
+        setProjects(Array.isArray(projectsData) ? projectsData : []);
+      } catch (error) {
+        console.error('Failed to fetch analytics data:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    fetchData();
+  }, []);
+
+  const completedTasks = tasks.filter(t => t.isCompleted);
+  const completionRate = tasks.length > 0 ? Math.round((completedTasks.length / tasks.length) * 100) : 0;
+  
+  // Group by category for impact metrics
+  const categories = tasks.reduce((acc: any, task) => {
+    const cat = task.category || 'General';
+    acc[cat] = (acc[cat] || 0) + 1;
+    return acc;
+  }, {});
+
+  const categoryImpact = Object.entries(categories).map(([label, count]) => ({
+    label,
+    value: Math.round(((count as number) / tasks.length) * 100),
+    color: label === 'Work Ritual' ? 'bg-tertiary' : label === 'Personal Growth' ? 'bg-on-tertiary-fixed-variant' : 'bg-secondary'
+  })).sort((a, b) => b.value - a.value);
+
+  // Group by project for project impact
+  const projectStats = tasks.reduce((acc: any, task) => {
+    const proj = task.project || 'Unassigned';
+    acc[proj] = (acc[proj] || 0) + 1;
+    return acc;
+  }, {});
+
+  const projectImpact = Object.entries(projectStats).map(([label, count]) => ({
+    label,
+    value: Math.round(((count as number) / tasks.length) * 100),
+    color: label === 'Unassigned' ? 'bg-outline' : 'bg-tertiary'
+  })).sort((a, b) => b.value - a.value).slice(0, 3);
+
+  if (isLoading) {
+    return (
+      <div className="flex flex-col items-center justify-center h-[80vh] text-outline">
+        <Loader2 className="animate-spin mb-4" size={48} />
+        <p className="text-lg font-bold">Powering up the Analytics Engine...</p>
+      </div>
+    );
+  }
+
   return (
     <div className="px-12 py-8 max-w-7xl mx-auto">
       <div className="mb-12 flex flex-col md:flex-row md:items-end justify-between gap-6">
         <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }}>
           <span className="text-[10px] uppercase tracking-widest font-bold text-on-secondary-container mb-2 block">Performance Overview</span>
           <h2 className="text-4xl font-extrabold text-on-surface tracking-tight">Analytics <span className="text-on-tertiary-container">Engine</span></h2>
-          <p className="mt-3 text-secondary max-w-md font-body leading-relaxed">Your productivity rituals translated into meaningful architectural data for the last 30 days.</p>
+          <p className="mt-3 text-secondary max-w-md font-body leading-relaxed">Your productivity rituals translated into meaningful architectural data.</p>
         </motion.div>
         
         <div className="flex gap-2">
           <button className="px-4 py-2 bg-surface-container-high text-on-surface text-xs font-semibold rounded-lg hover:bg-surface-variant transition-colors flex items-center gap-2">
             <Download size={14} /> Export Report
           </button>
-          <button className="px-4 py-2 bg-primary text-white text-xs font-semibold rounded-lg hover:opacity-90 transition-opacity">30 Days</button>
+          <button className="px-4 py-2 bg-primary text-white text-xs font-semibold rounded-lg hover:opacity-90 transition-opacity">All Time</button>
         </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-12">
-        <MetricCard label="Productivity Score" value="92" trend="+4.2%" progress={92} color="bg-tertiary" />
-        <MetricCard label="Tasks Completed" value="148" trend="+12" progress={70} color="bg-secondary-fixed-dim" />
-        <MetricCard label="Focus Hours" value="42.5h" trend="-2.1h" progress={45} color="bg-tertiary-fixed-dim" isNegative />
-        <MetricCard label="Archived Cycles" value="14" trend="Stable" progress={30} color="bg-primary-fixed-dim" />
+        <MetricCard label="Productivity Score" value={completionRate.toString()} trend="+4.2%" progress={completionRate} color="bg-tertiary" />
+        <MetricCard label="Tasks Completed" value={completedTasks.length.toString()} trend={`+${completedTasks.length}`} progress={70} color="bg-secondary-fixed-dim" />
+        <MetricCard label="Total Projects" value={projects.length.toString()} trend="Stable" progress={45} color="bg-tertiary-fixed-dim" />
+        <MetricCard label="Total Rituals" value={tasks.length.toString()} trend="Active" progress={30} color="bg-primary-fixed-dim" />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-8">
@@ -50,16 +114,6 @@ export const AnalyticsView: React.FC = () => {
                   <option>All Projects</option>
                 </select>
                 <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 text-outline" size={14} />
-              </div>
-              <div className="flex gap-3">
-                <div className="flex items-center gap-1.5">
-                  <span className="w-2.5 h-2.5 rounded-full bg-tertiary"></span>
-                  <span className="text-[10px] font-bold text-secondary uppercase tracking-tighter">Actual</span>
-                </div>
-                <div className="flex items-center gap-1.5">
-                  <span className="w-2.5 h-2.5 rounded-full bg-surface-container-highest"></span>
-                  <span className="text-[10px] font-bold text-secondary uppercase tracking-tighter">Target</span>
-                </div>
               </div>
             </div>
           </div>
@@ -83,20 +137,21 @@ export const AnalyticsView: React.FC = () => {
         <div className="bg-surface-container-lowest p-8 rounded-2xl border border-outline-variant/10 shadow-sm flex flex-col">
           <div className="flex items-center justify-between mb-6">
             <h3 className="text-lg font-bold">Impact Metrics</h3>
-            <div className="flex bg-surface-container-low p-1 rounded-lg">
-              <button className="px-3 py-1 text-[10px] font-bold bg-white rounded shadow-sm">Category</button>
-              <button className="px-3 py-1 text-[10px] font-bold text-secondary">Project</button>
-            </div>
           </div>
           <div className="space-y-5 flex-1">
-            <ImpactItem label="Strategic Design" value={42} color="bg-tertiary" />
-            <ImpactItem label="Technical Architecture" value={28} color="bg-on-tertiary-fixed-variant" />
-            <ImpactItem label="Operational Rituals" value={18} color="bg-secondary" />
-            <ImpactItem label="Discovery & Research" value={12} color="bg-outline" />
+            {categoryImpact.length > 0 ? (
+              categoryImpact.map((item, idx) => (
+                <ImpactItem key={idx} label={item.label} value={item.value} color={item.color} />
+              ))
+            ) : (
+              <p className="text-sm text-outline italic">No data available</p>
+            )}
           </div>
           <div className="mt-8 p-4 bg-tertiary-fixed rounded-xl flex items-start gap-3">
             <Lightbulb size={18} className="text-on-tertiary-fixed mt-0.5" />
-            <p className="text-[11px] leading-relaxed text-on-tertiary-fixed font-medium">Design output is up 12% this month. Shifting focus to Architecture could optimize balance.</p>
+            <p className="text-[11px] leading-relaxed text-on-tertiary-fixed font-medium">
+              {completionRate > 80 ? 'Exceptional consistency! Your architectural rituals are highly optimized.' : 'Focus on completing pending tasks to improve your overall productivity score.'}
+            </p>
           </div>
         </div>
       </div>
@@ -116,9 +171,9 @@ export const AnalyticsView: React.FC = () => {
             </div>
           </div>
           <div className="space-y-3">
-            <ImpactLegend color="bg-tertiary" label="Q3 Launch Readiness" value="45%" />
-            <ImpactLegend color="bg-secondary-fixed-dim" label="Internal Refactoring" value="30%" />
-            <ImpactLegend color="bg-primary-fixed-dim" label="Brand Identity 2.0" value="15%" />
+            {projectImpact.map((item, idx) => (
+              <ImpactLegend key={idx} color={item.color} label={item.label} value={`${item.value}%`} />
+            ))}
           </div>
         </div>
 
@@ -151,8 +206,14 @@ export const AnalyticsView: React.FC = () => {
         <div className="bg-surface-container-lowest p-8 rounded-2xl border border-outline-variant/10 shadow-sm">
           <h3 className="text-lg font-bold mb-6">Strategic Milestones</h3>
           <div className="space-y-6">
-            <MilestoneItem icon={Rocket} label="Q3 Launch Readiness" progress={85} />
-            <MilestoneItem icon={BarChart3} label="Internal Refactoring" progress={32} />
+            {projects.slice(0, 2).map((project) => (
+              <MilestoneItem 
+                key={project.id}
+                icon={Rocket} 
+                label={project.name} 
+                progress={project.status === 'Completed' ? 100 : project.status === 'Active' ? 65 : 20} 
+              />
+            ))}
           </div>
         </div>
       </div>
