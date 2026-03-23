@@ -13,14 +13,16 @@ import {
   RefreshCw
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { toast } from 'sonner';
 
 interface AddTaskModalProps {
   isOpen: boolean;
   onClose: () => void;
   onTaskAdded?: () => void;
+  initialTask?: any;
 }
 
-export const AddTaskModal: React.FC<AddTaskModalProps> = ({ isOpen, onClose, onTaskAdded }) => {
+export const AddTaskModal: React.FC<AddTaskModalProps> = ({ isOpen, onClose, onTaskAdded, initialTask }) => {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [category, setCategory] = useState('Work Ritual');
@@ -29,13 +31,44 @@ export const AddTaskModal: React.FC<AddTaskModalProps> = ({ isOpen, onClose, onT
   const [date, setDate] = useState('');
   const [time, setTime] = useState('45m');
   const [projects, setProjects] = useState<any[]>([]);
+  const [categories, setCategories] = useState<any[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
     if (isOpen) {
       fetchProjects();
+      fetchCategories();
+      if (initialTask) {
+        setTitle(initialTask.title || '');
+        setDescription(initialTask.description || '');
+        setCategory(initialTask.category || 'Work Ritual');
+        setPriority(initialTask.priority || 'Medium');
+        setProject(initialTask.project || 'None');
+        
+        if (initialTask.time) {
+          const parts = initialTask.time.split(' ');
+          if (parts.length > 1 && parts[0].includes('-')) {
+            setDate(parts[0]);
+            setTime(parts.slice(1).join(' '));
+          } else {
+            setDate('');
+            setTime(initialTask.time);
+          }
+        } else {
+          setDate('');
+          setTime('');
+        }
+      } else {
+        setTitle('');
+        setDescription('');
+        setCategory('Work Ritual');
+        setPriority('Medium');
+        setProject('None');
+        setDate('');
+        setTime('45m');
+      }
     }
-  }, [isOpen]);
+  }, [isOpen, initialTask]);
 
   const fetchProjects = async () => {
     try {
@@ -47,13 +80,26 @@ export const AddTaskModal: React.FC<AddTaskModalProps> = ({ isOpen, onClose, onT
     }
   };
 
+  const fetchCategories = async () => {
+    try {
+      const response = await fetch('/api/categories');
+      const data = await response.json();
+      setCategories(Array.isArray(data) ? data : []);
+    } catch (error) {
+      console.error('Failed to fetch categories:', error);
+    }
+  };
+
   const handleSubmit = async () => {
     if (!title) return;
     
     setIsSubmitting(true);
     try {
-      const response = await fetch('/api/tasks', {
-        method: 'POST',
+      const url = initialTask ? `/api/tasks/${initialTask.id}` : '/api/tasks';
+      const method = initialTask ? 'PATCH' : 'POST';
+      
+      const response = await fetch(url, {
+        method,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           title,
@@ -62,18 +108,20 @@ export const AddTaskModal: React.FC<AddTaskModalProps> = ({ isOpen, onClose, onT
           priority,
           project,
           time: `${date} ${time}`.trim(),
-          status: 'Upcoming'
+          status: initialTask ? initialTask.status : 'Upcoming'
         }),
       });
 
       if (response.ok) {
-        setTitle('');
-        setDescription('');
         onTaskAdded?.();
         onClose();
+        toast.success(initialTask ? 'Task updated successfully' : 'Task created successfully');
+      } else {
+        toast.error(initialTask ? 'Failed to update task' : 'Failed to create task');
       }
     } catch (error) {
       console.error('Failed to save task:', error);
+      toast.error('An error occurred while saving task');
     } finally {
       setIsSubmitting(false);
     }
@@ -99,8 +147,8 @@ export const AddTaskModal: React.FC<AddTaskModalProps> = ({ isOpen, onClose, onT
           >
             <div className="px-8 py-6 border-b border-outline-variant/10 flex items-center justify-between bg-surface-container-low">
               <div>
-                <h2 className="text-2xl font-extrabold text-on-surface font-headline tracking-tight">New Task Entry</h2>
-                <p className="text-xs text-secondary font-medium mt-0.5">Define a new architectural ritual for your day.</p>
+                <h2 className="text-2xl font-extrabold text-on-surface font-headline tracking-tight">{initialTask ? 'Edit Task' : 'New Task Entry'}</h2>
+                <p className="text-xs text-secondary font-medium mt-0.5">{initialTask ? 'Refine your architectural ritual.' : 'Define a new architectural ritual for your day.'}</p>
               </div>
               <button 
                 onClick={onClose}
@@ -151,10 +199,18 @@ export const AddTaskModal: React.FC<AddTaskModalProps> = ({ isOpen, onClose, onT
                       onChange={(e) => setCategory(e.target.value)}
                       className="w-full bg-surface-container-low border-none rounded-xl py-3.5 pl-12 pr-4 text-sm font-bold focus:ring-2 focus:ring-primary/10 appearance-none"
                     >
-                      <option>Work Ritual</option>
-                      <option>Personal Growth</option>
-                      <option>Administrative</option>
-                      <option>Wellness</option>
+                      {categories.length === 0 ? (
+                        <>
+                          <option>Work Ritual</option>
+                          <option>Personal Growth</option>
+                          <option>Administrative</option>
+                          <option>Wellness</option>
+                        </>
+                      ) : (
+                        categories.map(c => (
+                          <option key={c.id} value={c.name}>{c.name}</option>
+                        ))
+                      )}
                     </select>
                     <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 text-outline pointer-events-none" size={16} />
                   </div>
@@ -240,7 +296,7 @@ export const AddTaskModal: React.FC<AddTaskModalProps> = ({ isOpen, onClose, onT
               >
                 Cancel Entry
               </button>
-              <button 
+                <button 
                 onClick={handleSubmit}
                 disabled={isSubmitting || !title}
                 className="px-10 py-3 bg-primary text-white rounded-2xl font-bold shadow-xl shadow-primary/20 hover:shadow-primary/30 transition-all flex items-center gap-2 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
@@ -250,7 +306,7 @@ export const AddTaskModal: React.FC<AddTaskModalProps> = ({ isOpen, onClose, onT
                 ) : (
                   <Plus size={20} />
                 )}
-                Create Ritual
+                {initialTask ? 'Update Ritual' : 'Create Ritual'}
               </button>
             </div>
           </motion.div>
