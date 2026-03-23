@@ -11,6 +11,17 @@ const __dirname = path.dirname(__filename);
 
 let currentExcelFile = path.join(process.cwd(), "projects.xlsx");
 
+// Helper functions to safely read/write Excel files regardless of the loaded xlsx build
+function readExcelFile(filePath: string) {
+  const buffer = fs.readFileSync(filePath);
+  return XLSX.read(buffer, { type: "buffer" });
+}
+
+function writeExcelFile(workbook: any, filePath: string) {
+  const data = XLSX.write(workbook, { type: "array", bookType: "xlsx" });
+  fs.writeFileSync(filePath, Buffer.from(data));
+}
+
 // Multer setup for file uploads
 const storage = multer.memoryStorage();
 const upload = multer({ storage: storage });
@@ -30,10 +41,10 @@ function ensureExcelExists(filePath: string) {
     XLSX.utils.sheet_add_aoa(wsTasks, [["id", "title", "description", "status", "priority", "project", "category", "time", "isCompleted", "createdAt"]], { origin: "A1" });
     XLSX.utils.book_append_sheet(wb, wsTasks, "Tasks");
     
-    XLSX.writeFile(wb, filePath);
+    writeExcelFile(wb, filePath);
   } else {
     // Check if Sheets exist, if not add them
-    const workbook = XLSX.readFile(filePath);
+    const workbook = readExcelFile(filePath);
     let modified = false;
     
     if (!workbook.SheetNames.includes("Projects")) {
@@ -51,7 +62,7 @@ function ensureExcelExists(filePath: string) {
     }
     
     if (modified) {
-      XLSX.writeFile(workbook, filePath);
+      writeExcelFile(workbook, filePath);
     }
   }
 }
@@ -114,7 +125,7 @@ async function startServer() {
       if (!fs.existsSync(currentExcelFile)) {
         return res.json([]);
       }
-      const workbook = XLSX.readFile(currentExcelFile);
+      const workbook = readExcelFile(currentExcelFile);
       const sheetName = "Projects";
       if (!workbook.SheetNames.includes(sheetName)) return res.json([]);
       
@@ -132,7 +143,7 @@ async function startServer() {
       if (!name) return res.status(400).json({ error: "Name is required" });
 
       ensureExcelExists(currentExcelFile);
-      const workbook = XLSX.readFile(currentExcelFile);
+      const workbook = readExcelFile(currentExcelFile);
       const sheetName = "Projects";
       const worksheet = workbook.Sheets[sheetName];
       const data: any[] = XLSX.utils.sheet_to_json(worksheet);
@@ -148,7 +159,7 @@ async function startServer() {
       data.push(newProject);
       const newWs = XLSX.utils.json_to_sheet(data);
       workbook.Sheets[sheetName] = newWs;
-      XLSX.writeFile(workbook, currentExcelFile);
+      writeExcelFile(workbook, currentExcelFile);
 
       res.status(201).json(newProject);
     } catch (error) {
@@ -162,7 +173,7 @@ async function startServer() {
       if (!fs.existsSync(currentExcelFile)) {
         return res.json([]);
       }
-      const workbook = XLSX.readFile(currentExcelFile);
+      const workbook = readExcelFile(currentExcelFile);
       const sheetName = "Tasks";
       if (!workbook.SheetNames.includes(sheetName)) return res.json([]);
       
@@ -180,7 +191,7 @@ async function startServer() {
       if (!title) return res.status(400).json({ error: "Title is required" });
 
       ensureExcelExists(currentExcelFile);
-      const workbook = XLSX.readFile(currentExcelFile);
+      const workbook = readExcelFile(currentExcelFile);
       const sheetName = "Tasks";
       const worksheet = workbook.Sheets[sheetName];
       const data: any[] = XLSX.utils.sheet_to_json(worksheet);
@@ -201,7 +212,7 @@ async function startServer() {
       data.push(newTask);
       const newWs = XLSX.utils.json_to_sheet(data);
       workbook.Sheets[sheetName] = newWs;
-      XLSX.writeFile(workbook, currentExcelFile);
+      writeExcelFile(workbook, currentExcelFile);
 
       res.status(201).json(newTask);
     } catch (error) {
@@ -214,7 +225,7 @@ async function startServer() {
       const { id } = req.params;
       const updates = req.body;
 
-      const workbook = XLSX.readFile(currentExcelFile);
+      const workbook = readExcelFile(currentExcelFile);
       const sheetName = "Tasks";
       const worksheet = workbook.Sheets[sheetName];
       let data: any[] = XLSX.utils.sheet_to_json(worksheet);
@@ -226,7 +237,7 @@ async function startServer() {
       
       const newWs = XLSX.utils.json_to_sheet(data);
       workbook.Sheets[sheetName] = newWs;
-      XLSX.writeFile(workbook, currentExcelFile);
+      writeExcelFile(workbook, currentExcelFile);
 
       res.json(data[taskIndex]);
     } catch (error) {
@@ -239,7 +250,7 @@ async function startServer() {
       if (!fs.existsSync(currentExcelFile)) {
         return res.json([]);
       }
-      const workbook = XLSX.readFile(currentExcelFile);
+      const workbook = readExcelFile(currentExcelFile);
       
       let projects: any[] = [];
       if (workbook.SheetNames.includes("Projects")) {
@@ -353,7 +364,7 @@ async function startServer() {
       const wsTasks = XLSX.utils.json_to_sheet(processedTasks);
       XLSX.utils.book_append_sheet(newWb, wsTasks, "Tasks");
       
-      XLSX.writeFile(newWb, currentExcelFile);
+      writeExcelFile(newWb, currentExcelFile);
 
       res.json({ 
         message: "Import successful", 
