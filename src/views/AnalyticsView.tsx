@@ -12,6 +12,7 @@ import {
   Loader2
 } from 'lucide-react';
 import { motion } from 'motion/react';
+import { toast } from 'sonner';
 
 export const AnalyticsView: React.FC = () => {
   const [tasks, setTasks] = useState<any[]>([]);
@@ -68,6 +69,47 @@ export const AnalyticsView: React.FC = () => {
     color: label === 'Unassigned' ? 'bg-outline' : 'bg-tertiary'
   })).sort((a, b) => b.value - a.value).slice(0, 3);
 
+  const handleExportReport = () => {
+    try {
+      // Create CSV headers
+      const headers = ['Task Title', 'Project', 'Category', 'Priority', 'Status', 'Time', 'Completed'];
+      
+      // Create CSV rows from tasks
+      const csvRows = tasks.map(task => {
+        return [
+          `"${(task.title || '').replace(/"/g, '""')}"`,
+          `"${(task.project || '').replace(/"/g, '""')}"`,
+          `"${(task.category || '').replace(/"/g, '""')}"`,
+          `"${(task.priority || '').replace(/"/g, '""')}"`,
+          `"${(task.status || '').replace(/"/g, '""')}"`,
+          `"${(task.time || '').replace(/"/g, '""')}"`,
+          task.isCompleted ? 'Yes' : 'No'
+        ].join(',');
+      });
+      
+      // Combine headers and rows
+      const csvContent = [headers.join(','), ...csvRows].join('\n');
+      
+      // Create a Blob and download link
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.setAttribute('href', url);
+      link.setAttribute('download', `task-architect-report-${new Date().toISOString().split('T')[0]}.csv`);
+      link.style.visibility = 'hidden';
+      
+      // Trigger download
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      
+      toast.success('Report exported successfully');
+    } catch (error) {
+      console.error('Failed to export report:', error);
+      toast.error('Failed to export report');
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="flex flex-col items-center justify-center h-[80vh] text-outline">
@@ -87,7 +129,10 @@ export const AnalyticsView: React.FC = () => {
         </motion.div>
         
         <div className="flex gap-2">
-          <button className="px-4 py-2 bg-surface-container-high text-on-surface text-xs font-semibold rounded-lg hover:bg-surface-variant transition-colors flex items-center gap-2">
+          <button 
+            onClick={handleExportReport}
+            className="px-4 py-2 bg-surface-container-high text-on-surface text-xs font-semibold rounded-lg hover:bg-surface-variant transition-colors flex items-center gap-2"
+          >
             <Download size={14} /> Export Report
           </button>
           <button className="px-4 py-2 bg-primary text-white text-xs font-semibold rounded-lg hover:opacity-90 transition-opacity">All Time</button>

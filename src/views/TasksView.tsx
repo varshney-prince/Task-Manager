@@ -10,13 +10,17 @@ import {
   MoreVertical,
   Lightbulb,
   Layers,
-  RefreshCw
+  RefreshCw,
+  Trash2,
+  Edit2
 } from 'lucide-react';
 import { motion } from 'motion/react';
+import { toast } from 'sonner';
 
 export const TasksView: React.FC = () => {
   const [tasks, setTasks] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isEditing, setIsEditing] = useState(false);
 
   const fetchTasks = async () => {
     try {
@@ -53,8 +57,42 @@ export const TasksView: React.FC = () => {
     }
   };
 
+  const deleteTask = async (taskId: string) => {
+    try {
+      const response = await fetch(`/api/tasks/${taskId}`, {
+        method: 'DELETE',
+      });
+
+      if (response.ok) {
+        setTasks(tasks.filter(t => t.id !== taskId));
+      }
+    } catch (error) {
+      console.error('Failed to delete task:', error);
+    }
+  };
+
   const completedTasksCount = tasks.filter(t => t.isCompleted).length;
   const completionRate = tasks.length > 0 ? Math.round((completedTasksCount / tasks.length) * 100) : 0;
+
+  const handleShare = async (title: string, text: string) => {
+    try {
+      if (navigator.share) {
+        await navigator.share({
+          title,
+          text,
+          url: window.location.href,
+        });
+        toast.success('Shared successfully');
+      } else {
+        await navigator.clipboard.writeText(`${title}\n${text}\n${window.location.href}`);
+        toast.success('Link copied to clipboard');
+      }
+    } catch (error) {
+      if ((error as Error).name !== 'AbortError') {
+        toast.error('Failed to share');
+      }
+    }
+  };
 
   return (
     <div className="px-12 py-8 max-w-7xl mx-auto space-y-12">
@@ -136,7 +174,17 @@ export const TasksView: React.FC = () => {
             <div className="flex items-center justify-between mb-8">
               <h3 className="text-2xl font-headline font-bold">Current Focus</h3>
               <div className="flex gap-2">
-                <button className="p-2 hover:bg-surface-container rounded-lg transition-colors text-outline">
+                <button 
+                  onClick={() => setIsEditing(!isEditing)}
+                  className={`px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${isEditing ? 'bg-primary text-white' : 'bg-surface-container hover:bg-surface-container-high text-on-surface'}`}
+                >
+                  {isEditing ? 'Done' : 'Edit'}
+                </button>
+                <button 
+                  onClick={() => handleShare('Current Focus', `I'm currently focusing on ${tasks.length} tasks with a ${completionRate}% completion rate!`)}
+                  className="p-2 hover:bg-surface-container rounded-lg transition-colors text-outline"
+                  title="Share Focus"
+                >
                   <Share2 size={20} />
                 </button>
                 <button className="p-2 hover:bg-surface-container rounded-lg transition-colors text-outline">
@@ -161,6 +209,7 @@ export const TasksView: React.FC = () => {
                 tasks.map((task) => (
                   <TaskItem 
                     key={task.id}
+                    id={task.id}
                     title={task.title}
                     project={task.project}
                     description={task.description}
@@ -170,6 +219,8 @@ export const TasksView: React.FC = () => {
                     priority={task.priority}
                     isCompleted={task.isCompleted}
                     onToggle={() => toggleTaskCompletion(task.id, task.isCompleted)}
+                    isEditing={isEditing}
+                    onDelete={() => deleteTask(task.id)}
                   />
                 ))
               )}
@@ -191,13 +242,20 @@ export const TasksView: React.FC = () => {
       <section className="grid grid-cols-1 md:grid-cols-3 gap-8 pb-12">
         <StatItem icon={Check} label="Accuracy" value={`${completionRate}%`} trend="completion" subtext="On-time delivery ritual" />
         <StatItem icon={Clock} label="Tasks" value={tasks.length.toString()} trend="total" subtext="Deep work sessions tracked" />
-        <StatItem icon={Share2} label="Data Source" value="Excel" trend="Active" subtext="Local file integration" />
+        <StatItem 
+          icon={Share2} 
+          label="Data Source" 
+          value="Excel" 
+          trend="Active" 
+          subtext="Local file integration" 
+          onShare={() => handleShare('Data Source Integration', 'My tasks are seamlessly synced with an Excel Data Source in Task Architect!')}
+        />
       </section>
     </div>
   );
 };
 
-const TaskItem = ({ title, project, description, status, time, category, priority, isCompleted, onToggle }: any) => (
+const TaskItem = ({ id, title, project, description, status, time, category, priority, isCompleted, onToggle, isEditing, onDelete }: any) => (
   <div className={`group flex items-start gap-6 p-4 -mx-4 hover:bg-surface-container-low transition-colors rounded-2xl ${isCompleted ? 'opacity-60' : ''}`}>
     <div className="mt-1">
       <div 
@@ -216,12 +274,22 @@ const TaskItem = ({ title, project, description, status, time, category, priorit
             <span>{project}</span>
           </div>
         </div>
-        <span className={`px-3 py-1 text-[10px] font-bold uppercase tracking-wider rounded-full self-start mt-1 ${
-          status === 'In-Progress' ? 'bg-tertiary-fixed text-on-tertiary-fixed-variant' : 
-          status === 'Completed' ? 'bg-surface-variant text-on-surface-variant' : 'bg-surface-container-highest text-outline'
-        }`}>
-          {status}
-        </span>
+        <div className="flex items-center gap-3">
+          <span className={`px-3 py-1 text-[10px] font-bold uppercase tracking-wider rounded-full self-start mt-1 ${
+            status === 'In-Progress' ? 'bg-tertiary-fixed text-on-tertiary-fixed-variant' : 
+            status === 'Completed' ? 'bg-surface-variant text-on-surface-variant' : 'bg-surface-container-highest text-outline'
+          }`}>
+            {status}
+          </span>
+          {isEditing && (
+            <button 
+              onClick={onDelete}
+              className="p-1.5 bg-error/10 text-error hover:bg-error hover:text-white rounded-lg transition-colors mt-1"
+            >
+              <Trash2 size={16} />
+            </button>
+          )}
+        </div>
       </div>
       <p className={`text-secondary text-sm max-w-lg ${isCompleted ? 'line-through' : ''}`}>{description}</p>
       <div className="flex items-center gap-4 pt-2">
@@ -242,13 +310,24 @@ const TaskItem = ({ title, project, description, status, time, category, priorit
   </div>
 );
 
-const StatItem = ({ icon: Icon, label, value, trend, subtext }: any) => (
-  <div className="bg-surface-container-low p-6 rounded-2xl border border-outline-variant/5">
-    <div className="flex items-center gap-3 mb-4">
-      <div className="w-8 h-8 rounded-lg bg-tertiary-fixed flex items-center justify-center text-on-tertiary-fixed-variant">
-        <Icon size={18} />
+const StatItem = ({ icon: Icon, label, value, trend, subtext, onShare }: any) => (
+  <div className="bg-surface-container-low p-6 rounded-2xl border border-outline-variant/5 relative group">
+    <div className="flex items-center justify-between mb-4">
+      <div className="flex items-center gap-3">
+        <div className="w-8 h-8 rounded-lg bg-tertiary-fixed flex items-center justify-center text-on-tertiary-fixed-variant">
+          <Icon size={18} />
+        </div>
+        <h4 className="font-headline font-bold">{label}</h4>
       </div>
-      <h4 className="font-headline font-bold">{label}</h4>
+      {onShare && (
+        <button 
+          onClick={onShare}
+          className="p-1.5 text-outline hover:text-primary hover:bg-surface-container rounded-lg transition-colors opacity-0 group-hover:opacity-100"
+          title="Share"
+        >
+          <Share2 size={16} />
+        </button>
+      )}
     </div>
     <div className="flex items-baseline gap-2">
       <span className="text-3xl font-headline font-extrabold">{value}</span>

@@ -1,50 +1,77 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Plus, PlusCircle, Settings, Clock, Zap, Target, TrendingUp } from 'lucide-react';
 import { motion } from 'motion/react';
 import { TaskCard } from '../components/TaskCard';
+import { AddTaskModal } from '../components/AddTaskModal';
+import { ManageCategoriesModal } from '../components/ManageCategoriesModal';
+import { toast } from 'sonner';
 
-export const DashboardView: React.FC = () => {
+interface DashboardViewProps {
+  onQuickFocus?: () => void;
+}
+
+export const DashboardView: React.FC<DashboardViewProps> = ({ onQuickFocus }) => {
   const [tasks, setTasks] = useState<any[]>([]);
   const [projects, setProjects] = useState<any[]>([]);
+  const [categories, setCategories] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [activeProjectTab, setActiveProjectTab] = useState<string>('All Projects');
+  const [isEditing, setIsEditing] = useState(false);
+  const [isAddTaskModalOpen, setIsAddTaskModalOpen] = useState(false);
+  const [isManageCategoriesModalOpen, setIsManageCategoriesModalOpen] = useState(false);
+  const [editingTask, setEditingTask] = useState<any>(null);
+
+  const fetchData = useCallback(async () => {
+    try {
+      setIsLoading(true);
+      const [tasksRes, projectsRes, categoriesRes] = await Promise.all([
+        fetch('/api/tasks'),
+        fetch('/api/projects'),
+        fetch('/api/categories')
+      ]);
+      const tasksData = await tasksRes.json();
+      const projectsData = await projectsRes.json();
+      const categoriesData = await categoriesRes.json();
+      setTasks(Array.isArray(tasksData) ? tasksData : []);
+      setProjects(Array.isArray(projectsData) ? projectsData : []);
+      setCategories(Array.isArray(categoriesData) ? categoriesData : []);
+    } catch (error) {
+      console.error('Failed to fetch dashboard data:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
-    const fetchData = async () => {
-      try {
-        setIsLoading(true);
-        const [tasksRes, projectsRes] = await Promise.all([
-          fetch('/api/tasks'),
-          fetch('/api/projects')
-        ]);
-        const tasksData = await tasksRes.json();
-        const projectsData = await projectsRes.json();
-        setTasks(Array.isArray(tasksData) ? tasksData : []);
-        setProjects(Array.isArray(projectsData) ? projectsData : []);
-      } catch (error) {
-        console.error('Failed to fetch dashboard data:', error);
-      } finally {
-        setIsLoading(false);
-      }
-    };
     fetchData();
-  }, []);
+  }, [fetchData]);
 
   const completedTasks = tasks.filter(t => t.isCompleted);
   const pendingTasks = tasks.filter(t => !t.isCompleted);
   const completionRate = tasks.length > 0 ? Math.round((completedTasks.length / tasks.length) * 100) : 0;
 
-  // Group tasks by category
-  const categories = tasks.reduce((acc: any, task) => {
+  // Group tasks by category and combine with fetched categories
+  const taskCountsByCategory = tasks.reduce((acc: any, task) => {
     const cat = task.category || 'Uncategorized';
     acc[cat] = (acc[cat] || 0) + 1;
     return acc;
   }, {});
 
-  const categoryList = Object.entries(categories).map(([label, count]) => ({
-    label,
-    count: count as number,
-    color: label === 'Work Ritual' ? 'bg-primary' : label === 'Personal Growth' ? 'bg-tertiary-fixed-dim' : 'bg-on-secondary-container'
+  const categoryList = categories.map(cat => ({
+    label: cat.name,
+    count: taskCountsByCategory[cat.name] || 0,
+    color: cat.color
   }));
+
+  // Add Uncategorized if there are tasks without a matching category
+  const uncategorizedCount = tasks.filter(t => !categories.some(c => c.name === t.category)).length;
+  if (uncategorizedCount > 0) {
+    categoryList.push({
+      label: 'Uncategorized',
+      count: uncategorizedCount,
+      color: 'bg-outline'
+    });
+  }
 
   const toggleTaskCompletion = async (taskId: string) => {
     const task = tasks.find(t => t.id === taskId);
@@ -59,11 +86,76 @@ export const DashboardView: React.FC = () => {
 
       if (response.ok) {
         setTasks(tasks.map(t => t.id === taskId ? { ...t, isCompleted: !t.isCompleted } : t));
+        toast.success(`Task marked as ${!task.isCompleted ? 'completed' : 'pending'}`);
+      } else {
+        toast.error('Failed to update task status');
       }
     } catch (error) {
       console.error('Failed to toggle task completion:', error);
+      toast.error('An error occurred while updating task');
     }
   };
+
+  const deleteTask = async (taskId: string) => {
+    try {
+      const response = await fetch(`/api/tasks/${taskId}`, {
+        method: 'DELETE',
+      });
+
+      if (response.ok) {
+        setTasks(tasks.filter(t => t.id !== taskId));
+        toast.success('Task deleted successfully');
+      } else {
+        toast.error('Failed to delete task');
+      }
+    } catch (error) {
+      console.error('Failed to delete task:', error);
+      toast.error('An error occurred while deleting task');
+    }
+  };
+
+  const duplicateTask = async (task: any) => {
+    try {
+      const response = await fetch('/api/tasks', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: `${task.title} (Copy)`,
+          description: task.description,
+          category: task.category,
+          priority: task.priority,
+          project: task.project,
+          time: task.time,
+          status: 'Upcoming'
+        }),
+      });
+
+      if (response.ok) {
+        fetchData();
+        toast.success('Task duplicated successfully');
+      } else {
+        toast.error('Failed to duplicate task');
+      }
+    } catch (error) {
+      console.error('Failed to duplicate task:', error);
+      toast.error('An error occurred while duplicating task');
+    }
+  };
+
+  const handleEditTask = (task: any) => {
+    setEditingTask(task);
+    setIsAddTaskModalOpen(true);
+  };
+
+  const handleCloseModal = () => {
+    setIsAddTaskModalOpen(false);
+    // Add a small delay before clearing the editing task to prevent flickering during close animation
+    setTimeout(() => setEditingTask(null), 300);
+  };
+
+  const filteredTasks = activeProjectTab === 'All Projects' 
+    ? tasks 
+    : tasks.filter(t => t.project === activeProjectTab);
 
   return (
     <div className="px-12 py-8 max-w-7xl mx-auto">
@@ -86,8 +178,16 @@ export const DashboardView: React.FC = () => {
         </motion.div>
         
         <div className="flex gap-3">
-          <button className="bg-surface-container-low px-5 py-2.5 rounded-xl font-semibold text-sm hover:bg-surface-container-high transition-colors">Edit List</button>
-          <button className="bg-primary text-white px-6 py-2.5 rounded-xl font-semibold text-sm shadow-lg shadow-primary/10 hover:shadow-primary/20 transition-all flex items-center gap-2 active:scale-95">
+          <button 
+            onClick={() => setIsEditing(!isEditing)}
+            className={`px-5 py-2.5 rounded-xl font-semibold text-sm transition-colors ${isEditing ? 'bg-primary text-white' : 'bg-surface-container-low hover:bg-surface-container-high'}`}
+          >
+            {isEditing ? 'Done Editing' : 'Edit List'}
+          </button>
+          <button 
+            onClick={() => onQuickFocus ? onQuickFocus() : setIsAddTaskModalOpen(true)}
+            className="bg-primary text-white px-6 py-2.5 rounded-xl font-semibold text-sm shadow-lg shadow-primary/10 hover:shadow-primary/20 transition-all flex items-center gap-2 active:scale-95"
+          >
             <Zap size={16} fill="currentColor" />
             Quick Focus
           </button>
@@ -97,13 +197,17 @@ export const DashboardView: React.FC = () => {
       <div className="grid grid-cols-12 gap-8 items-start">
         <div className="col-span-12 lg:col-span-8 space-y-6">
           <div className="flex items-center gap-4 mb-2 pb-2 overflow-x-auto no-scrollbar">
-            <button className="flex-shrink-0 px-4 py-1.5 rounded-full text-xs font-bold bg-primary text-white transition-all">
+            <button 
+              onClick={() => setActiveProjectTab('All Projects')}
+              className={`flex-shrink-0 px-4 py-1.5 rounded-full text-xs font-bold transition-all ${activeProjectTab === 'All Projects' ? 'bg-primary text-white' : 'bg-surface-container-high text-on-surface-variant hover:bg-surface-container-highest'}`}
+            >
               All Projects
             </button>
             {projects.slice(0, 4).map((project) => (
               <button 
                 key={project.id}
-                className="flex-shrink-0 px-4 py-1.5 rounded-full text-xs font-bold bg-surface-container-high text-on-surface-variant hover:bg-surface-container-highest transition-all"
+                onClick={() => setActiveProjectTab(project.name)}
+                className={`flex-shrink-0 px-4 py-1.5 rounded-full text-xs font-bold transition-all ${activeProjectTab === project.name ? 'bg-primary text-white' : 'bg-surface-container-high text-on-surface-variant hover:bg-surface-container-highest'}`}
               >
                 {project.name}
               </button>
@@ -115,7 +219,7 @@ export const DashboardView: React.FC = () => {
               <div className="py-20 text-center text-outline font-medium animate-pulse">
                 Architecting your dashboard...
               </div>
-            ) : tasks.length === 0 ? (
+            ) : filteredTasks.length === 0 ? (
               <div className="py-20 text-center space-y-4 bg-surface-container-lowest rounded-3xl border border-dashed border-outline-variant/30">
                 <div className="w-16 h-16 bg-surface-container rounded-full flex items-center justify-center mx-auto text-outline/40">
                   <Target size={32} />
@@ -123,20 +227,30 @@ export const DashboardView: React.FC = () => {
                 <p className="text-outline font-medium">Your ritual list is empty.</p>
               </div>
             ) : (
-              tasks.slice(0, 5).map((task, index) => (
+              filteredTasks.slice(0, 5).map((task, index) => (
                 <motion.div
                   key={task.id}
                   initial={{ opacity: 0, x: -20 }}
                   animate={{ opacity: 1, x: 0 }}
                   transition={{ delay: index * 0.1 }}
                 >
-                  <TaskCard task={task} onToggle={toggleTaskCompletion} />
+                  <TaskCard 
+                    task={task} 
+                    onToggle={toggleTaskCompletion} 
+                    isEditing={isEditing}
+                    onDelete={deleteTask}
+                    onEdit={handleEditTask}
+                    onDuplicate={duplicateTask}
+                  />
                 </motion.div>
               ))
             )}
             
             {!isLoading && (
-              <button className="w-full border-2 border-dashed border-outline-variant/30 p-6 rounded-2xl flex items-center justify-center gap-3 text-secondary hover:bg-surface-container-low transition-all group">
+              <button 
+                onClick={() => setIsAddTaskModalOpen(true)}
+                className="w-full border-2 border-dashed border-outline-variant/30 p-6 rounded-2xl flex items-center justify-center gap-3 text-secondary hover:bg-surface-container-low transition-all group"
+              >
                 <PlusCircleIcon className="group-hover:scale-110 transition-transform" />
                 <span className="font-bold font-headline">Add another entry to your ritual</span>
               </button>
@@ -177,7 +291,13 @@ export const DashboardView: React.FC = () => {
           <div className="bg-surface-container-lowest p-6 rounded-2xl border border-outline-variant/5">
             <h4 className="font-headline text-sm font-bold mb-4 flex items-center justify-between">
               Categories
-              <Settings size={14} className="text-secondary" />
+              <button 
+                onClick={() => setIsManageCategoriesModalOpen(true)}
+                className="p-1 text-secondary hover:text-primary hover:bg-surface-container-low rounded transition-colors"
+                title="Manage Categories"
+              >
+                <Settings size={14} />
+              </button>
             </h4>
             <div className="space-y-2">
               {categoryList.length === 0 ? (
@@ -199,32 +319,45 @@ export const DashboardView: React.FC = () => {
           </div>
 
           <div className="bg-surface-container-lowest p-6 rounded-2xl border border-outline-variant/5">
-            <h4 className="font-headline text-sm font-bold mb-4">Focus Sessions</h4>
-            <div className="flex items-center justify-between mb-4">
-              {['Mon', 'Tue', 'Wed', 'Thu', 'Fri'].map((day, i) => {
+            <h4 className="font-headline text-base font-bold mb-6 text-on-surface">Focus Sessions</h4>
+            <div className="flex items-center justify-between mb-6">
+              {['MON', 'TUE', 'WED', 'THU', 'FRI'].map((day, i) => {
                 const date = new Date();
                 date.setDate(date.getDate() + i);
                 const isToday = i === 0;
                 return (
-                  <div key={day} className={`text-center ${isToday ? '' : 'opacity-40'}`}>
-                    <span className="text-[10px] font-bold text-secondary uppercase block">{day}</span>
-                    <span className={`w-8 h-8 flex items-center justify-center rounded-full text-xs font-bold mt-1 ${isToday ? 'bg-primary text-white' : ''}`}>
+                  <div key={day} className="text-center flex flex-col items-center gap-1.5">
+                    <span className={`text-[10px] font-bold ${isToday ? 'text-primary' : 'text-outline/60'}`}>{day}</span>
+                    <span className={`w-9 h-9 flex items-center justify-center rounded-full text-sm font-bold ${isToday ? 'bg-[#0F172A] text-white shadow-md' : 'text-outline/80'}`}>
                       {date.getDate()}
                     </span>
                   </div>
                 );
               })}
             </div>
-            <div className="p-4 bg-surface-container-low rounded-xl border-l-2 border-on-tertiary-container">
-              <p className="text-xs font-bold text-on-tertiary-container uppercase tracking-tighter mb-1">Architectural Mastery</p>
-              <p className="text-sm font-bold leading-tight">Your data is synchronized with Excel</p>
-              <p className="text-[11px] text-secondary mt-1 flex items-center gap-1">
-                <Clock size={12} /> Local Data Source Active
+            <div className="p-5 bg-surface-container-low rounded-2xl border-l-[3px] border-primary shadow-sm">
+              <p className="text-[11px] font-bold text-primary uppercase tracking-wide mb-2">Architectural Mastery</p>
+              <p className="text-[15px] font-bold leading-snug text-on-surface mb-3 pr-4">Your data is synchronized with Excel</p>
+              <p className="text-xs text-secondary flex items-center gap-1.5 font-medium">
+                <Clock size={14} className="text-secondary/70" /> Local Data Source Active
               </p>
             </div>
           </div>
         </aside>
       </div>
+
+      <AddTaskModal 
+        isOpen={isAddTaskModalOpen} 
+        onClose={handleCloseModal} 
+        onTaskAdded={fetchData} 
+        initialTask={editingTask}
+      />
+
+      <ManageCategoriesModal
+        isOpen={isManageCategoriesModalOpen}
+        onClose={() => setIsManageCategoriesModalOpen(false)}
+        onCategoriesUpdated={fetchData}
+      />
     </div>
   );
 };

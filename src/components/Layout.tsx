@@ -7,7 +7,6 @@ import {
   Settings, 
   Bell, 
   Search, 
-  Calendar,
   Plus,
   LogOut,
   HelpCircle,
@@ -108,6 +107,13 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, onAdd
 };
 
 export const TopBar: React.FC = () => {
+  const [showNotifications, setShowNotifications] = useState(false);
+  const notifications = [
+    { id: 1, title: 'Task Completed', message: 'You finished "Review Q3 Report"', time: '10m ago', unread: true },
+    { id: 2, title: 'New Assignment', message: 'You were assigned "Update Design System"', time: '1h ago', unread: true },
+    { id: 3, title: 'Reminder', message: 'Team sync in 15 minutes', time: '2h ago', unread: false },
+  ];
+
   return (
     <header className="sticky top-0 z-40 bg-background/80 backdrop-blur-md flex items-center justify-between px-8 py-4">
       <div className="flex-1 max-w-xl">
@@ -122,21 +128,64 @@ export const TopBar: React.FC = () => {
       </div>
 
       <div className="flex items-center gap-4">
-        <button className="p-2 text-secondary hover:text-primary transition-colors relative">
-          <Bell size={20} />
-          <span className="absolute top-2 right-2 w-2 h-2 bg-on-tertiary-container rounded-full border-2 border-background"></span>
-        </button>
-        <button className="p-2 text-secondary hover:text-primary transition-colors">
-          <Calendar size={20} />
-        </button>
+        <div className="relative">
+          <button 
+            onClick={() => setShowNotifications(!showNotifications)}
+            className={`p-2 transition-colors relative rounded-full ${showNotifications ? 'bg-surface-container-low text-primary' : 'text-secondary hover:text-primary hover:bg-surface-container-lowest'}`}
+          >
+            <Bell size={20} className="text-[#334155]" strokeWidth={2} />
+            <span className="absolute top-[6px] right-[8px] w-2 h-2 bg-[#0ea5e9] rounded-full border-2 border-background"></span>
+          </button>
+
+          <AnimatePresence>
+            {showNotifications && (
+              <>
+                <div 
+                  className="fixed inset-0 z-40" 
+                  onClick={() => setShowNotifications(false)}
+                />
+                <motion.div 
+                  initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                  transition={{ duration: 0.2 }}
+                  className="absolute right-0 mt-2 w-80 bg-surface-container-lowest rounded-2xl shadow-xl border border-outline-variant/10 overflow-hidden z-50"
+                >
+                  <div className="p-4 border-b border-outline-variant/10 flex items-center justify-between bg-surface-container-low">
+                    <h3 className="font-bold text-sm text-on-surface">Notifications</h3>
+                    <button className="text-[10px] font-bold text-primary uppercase tracking-wider hover:underline">
+                      Mark all read
+                    </button>
+                  </div>
+                  <div className="max-h-[320px] overflow-y-auto no-scrollbar">
+                    {notifications.map((notif) => (
+                      <div 
+                        key={notif.id} 
+                        className={`p-4 border-b border-outline-variant/5 hover:bg-surface-container-low transition-colors cursor-pointer ${notif.unread ? 'bg-primary/5' : ''}`}
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <h4 className={`text-sm font-bold ${notif.unread ? 'text-on-surface' : 'text-secondary'}`}>
+                            {notif.title}
+                          </h4>
+                          <span className="text-[10px] text-outline whitespace-nowrap mt-0.5">{notif.time}</span>
+                        </div>
+                        <p className="text-xs text-secondary mt-1">{notif.message}</p>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="p-3 text-center border-t border-outline-variant/10 bg-surface-container-low">
+                    <button className="text-xs font-bold text-secondary hover:text-primary transition-colors">
+                      View all notifications
+                    </button>
+                  </div>
+                </motion.div>
+              </>
+            )}
+          </AnimatePresence>
+        </div>
         <div className="h-8 w-[1px] bg-outline-variant/20 mx-2"></div>
-        <div className="w-8 h-8 rounded-full bg-surface-container-highest overflow-hidden">
-          <img 
-            src="https://lh3.googleusercontent.com/aida-public/AB6AXuBaUyhHKoEkpl7slwhCiwNq4Ye-wseuyO59m7hq-s5l3ZzMspJRQmiSteWHMn0DDi8NUy_sNdjt5VNTVY4svRMO_868fzNM08G5CIceB7g_q-NkKyffWF9lnbCkW_8XMjvc9pIYynpRdF3OEBOKuccvLxKZoi11jnk0Pn2iWePE-W5f6Nwd1VwwvaCcBj4cnHy2KqYj-81RfOreZqRbsKtU9Y9vkW_1E_3y4k4FTkYnAMoldGSa0Wn5fj1TEr3uRrThbIAwoNtzhNV8" 
-            alt="Avatar" 
-            className="w-full h-full object-cover"
-            referrerPolicy="no-referrer"
-          />
+        <div className="w-10 h-10 rounded-full bg-[#FDBA74] flex items-center justify-center overflow-hidden shadow-sm">
+          <div className="w-5 h-6 border-2 border-white rounded-sm bg-white/20"></div>
         </div>
       </div>
     </header>

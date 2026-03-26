@@ -7,9 +7,11 @@ import { HistoryView } from './views/HistoryView';
 import { ActivityView } from './views/ActivityView';
 import { SettingsView } from './views/SettingsView';
 import { ProjectsView } from './views/ProjectsView';
+import { QuickFocusView } from './views/QuickFocusView';
 import { AddTaskModal } from './components/AddTaskModal';
 import { AddProjectModal } from './components/AddProjectModal';
 import { motion, AnimatePresence } from 'motion/react';
+import { Toaster } from 'sonner';
 
 const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState('dashboard');
@@ -19,26 +21,46 @@ const App: React.FC = () => {
   const renderView = () => {
     switch (activeTab) {
       case 'dashboard':
-        return <DashboardView />;
+        return <DashboardView onQuickFocus={() => setActiveTab('quick-focus')} />;
       case 'tasks':
         return <TasksView />;
       case 'analytics':
         return <AnalyticsView />;
       case 'history':
-        return <HistoryView />;
+        return <HistoryView onViewReport={() => setActiveTab('analytics')} />;
       case 'activity':
         return <ActivityView />;
       case 'settings':
         return <SettingsView />;
       case 'projects':
         return <ProjectsView />;
+      case 'quick-focus':
+        return <QuickFocusView onBack={() => setActiveTab('dashboard')} />;
       default:
-        return <DashboardView />;
+        return <DashboardView onQuickFocus={() => setActiveTab('quick-focus')} />;
     }
   };
 
+  if (activeTab === 'quick-focus') {
+    return (
+      <AnimatePresence mode="wait">
+        <motion.div
+          key="quick-focus"
+          initial={{ opacity: 0, scale: 0.95 }}
+          animate={{ opacity: 1, scale: 1 }}
+          exit={{ opacity: 0, scale: 1.05 }}
+          transition={{ duration: 0.4, ease: "easeInOut" }}
+          className="min-h-screen bg-background"
+        >
+          <QuickFocusView onBack={() => setActiveTab('dashboard')} />
+        </motion.div>
+      </AnimatePresence>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-background flex">
+      <Toaster position="bottom-right" theme="dark" />
       <Sidebar 
         activeTab={activeTab} 
         setActiveTab={setActiveTab} 

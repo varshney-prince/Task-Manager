@@ -41,6 +41,11 @@ function ensureExcelExists(filePath: string) {
     XLSX.utils.sheet_add_aoa(wsTasks, [["id", "title", "description", "status", "priority", "project", "category", "time", "isCompleted", "createdAt"]], { origin: "A1" });
     XLSX.utils.book_append_sheet(wb, wsTasks, "Tasks");
     
+    // Categories Sheet
+    const wsCategories = XLSX.utils.json_to_sheet([]);
+    XLSX.utils.sheet_add_aoa(wsCategories, [["id", "name", "color", "createdAt"]], { origin: "A1" });
+    XLSX.utils.book_append_sheet(wb, wsCategories, "Categories");
+    
     writeExcelFile(wb, filePath);
   } else {
     // Check if Sheets exist, if not add them
@@ -58,6 +63,19 @@ function ensureExcelExists(filePath: string) {
       const ws = XLSX.utils.json_to_sheet([]);
       XLSX.utils.sheet_add_aoa(ws, [["id", "title", "description", "status", "priority", "project", "category", "time", "isCompleted", "createdAt"]], { origin: "A1" });
       XLSX.utils.book_append_sheet(workbook, ws, "Tasks");
+      modified = true;
+    }
+
+    if (!workbook.SheetNames.includes("Categories")) {
+      const ws = XLSX.utils.json_to_sheet([]);
+      XLSX.utils.sheet_add_aoa(ws, [["id", "name", "color", "createdAt"]], { origin: "A1" });
+      // Add some default categories
+      XLSX.utils.sheet_add_json(ws, [
+        { id: "1", name: "Work Ritual", color: "bg-primary", createdAt: new Date().toISOString() },
+        { id: "2", name: "Personal Growth", color: "bg-tertiary-fixed-dim", createdAt: new Date().toISOString() },
+        { id: "3", name: "Health", color: "bg-on-secondary-container", createdAt: new Date().toISOString() }
+      ], { origin: "A2", skipHeader: true });
+      XLSX.utils.book_append_sheet(workbook, ws, "Categories");
       modified = true;
     }
     
@@ -167,6 +185,126 @@ async function startServer() {
     }
   });
 
+  app.delete("/api/projects/:id", (req, res) => {
+    try {
+      const { id } = req.params;
+
+      const workbook = readExcelFile(currentExcelFile);
+      const sheetName = "Projects";
+      const worksheet = workbook.Sheets[sheetName];
+      let data: any[] = XLSX.utils.sheet_to_json(worksheet);
+
+      const projectIndex = data.findIndex(p => p.id === id);
+      if (projectIndex === -1) return res.status(404).json({ error: "Project not found" });
+
+      data.splice(projectIndex, 1);
+      
+      const newWs = XLSX.utils.json_to_sheet(data);
+      workbook.Sheets[sheetName] = newWs;
+      writeExcelFile(workbook, currentExcelFile);
+
+      res.json({ message: "Project deleted successfully" });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to delete project" });
+    }
+  });
+
+  // Categories Endpoints
+  app.get("/api/categories", (req, res) => {
+    try {
+      if (!fs.existsSync(currentExcelFile)) {
+        return res.json([]);
+      }
+      const workbook = readExcelFile(currentExcelFile);
+      const sheetName = "Categories";
+      if (!workbook.SheetNames.includes(sheetName)) return res.json([]);
+      
+      const worksheet = workbook.Sheets[sheetName];
+      const data = XLSX.utils.sheet_to_json(worksheet);
+      res.json(data);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to read categories" });
+    }
+  });
+
+  app.post("/api/categories", (req, res) => {
+    try {
+      const { name, color } = req.body;
+      if (!name) return res.status(400).json({ error: "Name is required" });
+
+      ensureExcelExists(currentExcelFile);
+      const workbook = readExcelFile(currentExcelFile);
+      const sheetName = "Categories";
+      const worksheet = workbook.Sheets[sheetName];
+      const data: any[] = XLSX.utils.sheet_to_json(worksheet);
+
+      const newCategory = {
+        id: Date.now().toString(),
+        name,
+        color: color || "bg-primary",
+        createdAt: new Date().toISOString(),
+      };
+
+      data.push(newCategory);
+      const newWs = XLSX.utils.json_to_sheet(data);
+      workbook.Sheets[sheetName] = newWs;
+      writeExcelFile(workbook, currentExcelFile);
+
+      res.status(201).json(newCategory);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to save category" });
+    }
+  });
+
+  app.patch("/api/categories/:id", (req, res) => {
+    try {
+      const { id } = req.params;
+      const updates = req.body;
+
+      const workbook = readExcelFile(currentExcelFile);
+      const sheetName = "Categories";
+      const worksheet = workbook.Sheets[sheetName];
+      let data: any[] = XLSX.utils.sheet_to_json(worksheet);
+
+      const catIndex = data.findIndex(c => c.id === id);
+      if (catIndex === -1) return res.status(404).json({ error: "Category not found" });
+
+      data[catIndex] = { ...data[catIndex], ...updates };
+      
+      const newWs = XLSX.utils.json_to_sheet(data);
+      workbook.Sheets[sheetName] = newWs;
+      writeExcelFile(workbook, currentExcelFile);
+
+      res.json(data[catIndex]);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to update category" });
+    }
+  });
+
+  app.delete("/api/categories/:id", (req, res) => {
+    try {
+      const { id } = req.params;
+
+      const workbook = readExcelFile(currentExcelFile);
+      const sheetName = "Categories";
+      const worksheet = workbook.Sheets[sheetName];
+      let data: any[] = XLSX.utils.sheet_to_json(worksheet);
+
+      const catIndex = data.findIndex(c => c.id === id);
+      if (catIndex === -1) return res.status(404).json({ error: "Category not found" });
+
+      data.splice(catIndex, 1);
+      
+      const newWs = XLSX.utils.json_to_sheet(data);
+      workbook.Sheets[sheetName] = newWs;
+      writeExcelFile(workbook, currentExcelFile);
+
+      res.json({ message: "Category deleted successfully" });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to delete category" });
+    }
+  });
+
   // Tasks Endpoints
   app.get("/api/tasks", (req, res) => {
     try {
@@ -242,6 +380,30 @@ async function startServer() {
       res.json(data[taskIndex]);
     } catch (error) {
       res.status(500).json({ error: "Failed to update task" });
+    }
+  });
+
+  app.delete("/api/tasks/:id", (req, res) => {
+    try {
+      const { id } = req.params;
+
+      const workbook = readExcelFile(currentExcelFile);
+      const sheetName = "Tasks";
+      const worksheet = workbook.Sheets[sheetName];
+      let data: any[] = XLSX.utils.sheet_to_json(worksheet);
+
+      const taskIndex = data.findIndex(t => t.id === id);
+      if (taskIndex === -1) return res.status(404).json({ error: "Task not found" });
+
+      data.splice(taskIndex, 1);
+      
+      const newWs = XLSX.utils.json_to_sheet(data);
+      workbook.Sheets[sheetName] = newWs;
+      writeExcelFile(workbook, currentExcelFile);
+
+      res.json({ message: "Task deleted successfully" });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to delete task" });
     }
   });
 
