@@ -15,6 +15,7 @@ import {
   Edit2
 } from 'lucide-react';
 import { motion } from 'motion/react';
+import { toast } from 'sonner';
 
 export const TasksView: React.FC = () => {
   const [tasks, setTasks] = useState<any[]>([]);
@@ -72,6 +73,26 @@ export const TasksView: React.FC = () => {
 
   const completedTasksCount = tasks.filter(t => t.isCompleted).length;
   const completionRate = tasks.length > 0 ? Math.round((completedTasksCount / tasks.length) * 100) : 0;
+
+  const handleShare = async (title: string, text: string) => {
+    try {
+      if (navigator.share) {
+        await navigator.share({
+          title,
+          text,
+          url: window.location.href,
+        });
+        toast.success('Shared successfully');
+      } else {
+        await navigator.clipboard.writeText(`${title}\n${text}\n${window.location.href}`);
+        toast.success('Link copied to clipboard');
+      }
+    } catch (error) {
+      if ((error as Error).name !== 'AbortError') {
+        toast.error('Failed to share');
+      }
+    }
+  };
 
   return (
     <div className="px-12 py-8 max-w-7xl mx-auto space-y-12">
@@ -159,7 +180,11 @@ export const TasksView: React.FC = () => {
                 >
                   {isEditing ? 'Done' : 'Edit'}
                 </button>
-                <button className="p-2 hover:bg-surface-container rounded-lg transition-colors text-outline">
+                <button 
+                  onClick={() => handleShare('Current Focus', `I'm currently focusing on ${tasks.length} tasks with a ${completionRate}% completion rate!`)}
+                  className="p-2 hover:bg-surface-container rounded-lg transition-colors text-outline"
+                  title="Share Focus"
+                >
                   <Share2 size={20} />
                 </button>
                 <button className="p-2 hover:bg-surface-container rounded-lg transition-colors text-outline">
@@ -217,7 +242,14 @@ export const TasksView: React.FC = () => {
       <section className="grid grid-cols-1 md:grid-cols-3 gap-8 pb-12">
         <StatItem icon={Check} label="Accuracy" value={`${completionRate}%`} trend="completion" subtext="On-time delivery ritual" />
         <StatItem icon={Clock} label="Tasks" value={tasks.length.toString()} trend="total" subtext="Deep work sessions tracked" />
-        <StatItem icon={Share2} label="Data Source" value="Excel" trend="Active" subtext="Local file integration" />
+        <StatItem 
+          icon={Share2} 
+          label="Data Source" 
+          value="Excel" 
+          trend="Active" 
+          subtext="Local file integration" 
+          onShare={() => handleShare('Data Source Integration', 'My tasks are seamlessly synced with an Excel Data Source in Task Architect!')}
+        />
       </section>
     </div>
   );
@@ -278,13 +310,24 @@ const TaskItem = ({ id, title, project, description, status, time, category, pri
   </div>
 );
 
-const StatItem = ({ icon: Icon, label, value, trend, subtext }: any) => (
-  <div className="bg-surface-container-low p-6 rounded-2xl border border-outline-variant/5">
-    <div className="flex items-center gap-3 mb-4">
-      <div className="w-8 h-8 rounded-lg bg-tertiary-fixed flex items-center justify-center text-on-tertiary-fixed-variant">
-        <Icon size={18} />
+const StatItem = ({ icon: Icon, label, value, trend, subtext, onShare }: any) => (
+  <div className="bg-surface-container-low p-6 rounded-2xl border border-outline-variant/5 relative group">
+    <div className="flex items-center justify-between mb-4">
+      <div className="flex items-center gap-3">
+        <div className="w-8 h-8 rounded-lg bg-tertiary-fixed flex items-center justify-center text-on-tertiary-fixed-variant">
+          <Icon size={18} />
+        </div>
+        <h4 className="font-headline font-bold">{label}</h4>
       </div>
-      <h4 className="font-headline font-bold">{label}</h4>
+      {onShare && (
+        <button 
+          onClick={onShare}
+          className="p-1.5 text-outline hover:text-primary hover:bg-surface-container rounded-lg transition-colors opacity-0 group-hover:opacity-100"
+          title="Share"
+        >
+          <Share2 size={16} />
+        </button>
+      )}
     </div>
     <div className="flex items-baseline gap-2">
       <span className="text-3xl font-headline font-extrabold">{value}</span>

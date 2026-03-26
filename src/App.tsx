@@ -27,7 +27,7 @@ const App: React.FC = () => {
       case 'analytics':
         return <AnalyticsView />;
       case 'history':
-        return <HistoryView />;
+        return <HistoryView onViewReport={() => setActiveTab('analytics')} />;
       case 'activity':
         return <ActivityView />;
       case 'settings':
